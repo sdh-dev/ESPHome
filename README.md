@@ -1,2 +1,2 @@
 # ESPHome
-Configurations and automations utilizing ESPHome for home automation
+Configurations and Automations utilizing ESPHome for home automation
