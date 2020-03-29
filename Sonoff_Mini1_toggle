@@ -1,0 +1,51 @@
+esphome:
+  name: mini1
+  platform: ESP8266
+  board: esp01_1m
+
+wifi:
+  ssid: !secret wifi1_ssid
+  password: !secret wifi1_passwd
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Mini1 Fallback Hotspot"
+    password: "tUWTbtYQQOM0"
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+switch:
+  - platform: gpio
+    pin: GPIO12
+    name: "mini1 relay"
+    id: relay
+
+status_led:
+  pin:
+    number: GPIO13
+    inverted: yes
+  
+# This mode will allow the external switch to work like a 3-way switch. 
+#  Turning the switch either off or on will toggle the state of the relay.
+# This allows the relay to be controlled either by the physical switch or remotely.
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+      inverted: True
+    name: "External Switch Input"
+    on_press:
+      then:
+        - switch.toggle: relay
+    on_release:
+      then:
+        - switch.toggle: relay
