@@ -1,0 +1,95 @@
+# In this mode, turning the external switch ON will cause the relay to stay ON for a set period of time
+# Turning the external switch OFF will wait a short period of time, then turn the relay OFF
+# This will preserve the orientation of the external switch (ON is on, OFF is off), but it may be confusing if you
+#   come to the switch in the ON position after it has timed out (relay is OFF). 
+#   You will have to turn the switch OFF, then ON again to trigger a new timed period of running.
+# There is an immediate switch mode that is available to the automation
+esphome:
+  name: mini1
+  platform: ESP8266
+  board: esp01_1m
+  
+wifi:
+  ssid: !secret wifi1_ssid
+  password: !secret wifi1_passwd
+  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Mini1 Fallback Hotspot"
+    password: "tUWTbtYQQOM0"
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+script:
+  - id: delayed_on
+    then:
+      - switch.turn_on: relay
+      - delay: 1min
+      - switch.turn_off: relay
+  - id: delayed_off
+    then:
+      - delay: 5s
+      - switch.turn_off: relay
+
+switch:
+  - platform: gpio
+    pin: GPIO12
+    id: relay
+    restore_mode: ALWAYS_OFF
+    icon: "mdi:electric-switch-closed"
+
+  # Immediate will stop all delayed actions and immediately change the relay to ON or OFF
+  - platform: template
+    name: "immediate"
+    id: immediate_switch
+    icon: "mdi:light-switch"
+    turn_on_action:
+      - script.stop: delayed_on
+      - script.stop: delayed_off
+      - switch.turn_on: relay
+    turn_off_action:
+      - script.stop: delayed_on
+      - script.stop: delayed_off
+      - switch.turn_off: relay
+
+  # Delayed_switch will stop all delayed actions to reset timers, then call again (starting new timer)
+  - platform: template
+    name: "delayed"
+    id: delayed_switch
+    icon: "mdi:light-switch"
+    turn_on_action:
+      - script.stop: delayed_on
+      - script.stop: delayed_off
+      - script.execute: delayed_on
+    turn_off_action:
+      - script.stop: delayed_on
+      - script.stop: delayed_off
+      - script.execute: delayed_off
+      
+status_led:
+  pin:
+    number: GPIO13
+    inverted: yes
+  
+# This mode will allow the external switch to turn ON or turn OFF the device
+#  Switch ON will trigger on with a delayed off
+#  Switch OFF will trigger the switch off, with a delayed off, if set.
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+      inverted: True
+    name: "External Switch Input"
+    on_press:
+      - switch.turn_on: delayed_switch
+    on_release:
+      - switch.turn_off: delayed_switch
