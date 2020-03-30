@@ -1,0 +1,121 @@
+# Toggling the external switch will turn the relay ON or OFF, depending on the current state.
+# This will act like a 3 way switch
+# There is an immediate switch mode that is available to the automation console.
+# There is also a delayed switch mode that is available to the automation console.
+esphome:
+  name: mini1
+  platform: ESP8266
+  board: esp01_1m
+  
+wifi:
+  ssid: !secret wifi1_ssid
+  password: !secret wifi1_passwd
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Mini2e Fallback Hotspot"
+    password: "tUWTbtYQQOM0"
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+script:
+  - id: delayed_on
+    then:
+      - lambda: id(immediate_switch).publish_state(0); # do this for the automation console to display the proper state
+      - lambda: id(delayed_switch).publish_state(1);  # do this for the automation console to display the proper state
+      - switch.turn_on: relay
+      - delay: 10min
+      - switch.turn_off: relay
+      - lambda: id(delayed_switch).publish_state(0); # do this for the automation console to display the proper state
+  - id: delayed_off
+    then:
+      - lambda: id(immediate_switch).publish_state(0); # do this for the automation console to display the proper state
+      - lambda: id(delayed_switch).publish_state(1);  # do this for the automation console to display the proper state
+      - delay: 0s                                      # change this if you want a delay after the turning off
+      - switch.turn_off: relay
+      - lambda: id(delayed_switch).publish_state(0); # do this for the automation console to display the proper state
+
+switch:
+  - platform: gpio
+    pin: GPIO12
+    id: relay
+    name: "Internal Relay"
+    internal: true
+    restore_mode: ALWAYS_OFF
+
+  # Immediate will stop all delayed actions and immediately change the relay to ON or OFF
+  - platform: template
+    name: "immediate"
+    id: immediate_switch
+    icon: "mdi:light-switch"
+    turn_on_action:
+      - script.stop: delayed_on
+      - script.stop: delayed_off
+      - lambda: id(delayed_switch).publish_state(0); # do this for the automation console to display the proper state
+      - switch.turn_on: relay
+      - lambda: id(immediate_switch).publish_state(1); # do this for the automation console to display the proper state
+    turn_off_action:
+      - script.stop: delayed_on
+      - script.stop: delayed_off
+      - lambda: id(delayed_switch).publish_state(0); # do this for the automation console to display the proper state
+      - switch.turn_off: relay
+      - lambda: id(immediate_switch).publish_state(0); # do this for the automation console to display the proper state
+
+
+  # Delayed_switch will stop all delayed actions to reset timers, then call again (starting new timer)
+  - platform: template
+    name: "delayed"
+    id: delayed_switch
+    icon: "mdi:light-switch"
+    turn_on_action:
+      then:
+        - script.stop: delayed_on     # Stop the running of any delayed scripts, so that we can have a single instance with a new timer
+        - script.stop: delayed_off
+        - script.execute: delayed_on
+    turn_off_action:
+      then:
+        - script.stop: delayed_on     # Stop the running of any delayed scripts, so that we can have a single instance with a new timer
+        - script.stop: delayed_off
+        - script.execute: delayed_off
+
+      
+status_led:
+  pin:
+    number: GPIO13
+    inverted: yes
+  
+# This mode will allow the external switch to turn ON or turn OFF the device
+#  This will act like a 3 way switch, with an added delay
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLUP
+      inverted: True
+    name: "External Switch Input"
+    on_press:
+      then:
+        - if:
+            condition:
+              switch.is_on: relay
+            then:
+              - switch.turn_off: delayed_switch
+            else:
+              - switch.turn_on: delayed_switch
+    on_release:
+      then:
+        - if:
+            condition:
+              switch.is_on: relay
+            then:
+              - switch.turn_off: delayed_switch
+            else:
+              - switch.turn_on: delayed_switch
