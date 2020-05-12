@@ -1,0 +1,126 @@
+# This is the FreeCube in-wall smart switch available from amazon.
+# Model number AWS01F
+#
+# I had to flash this manually, and had to solder the connectors because it did not have connections for flashing
+# I also had to trace the board with my DMM to figure out which pins were used. 
+# The values in this code represent what I found and what seems to work. YMMV
+# This CAN be modified, but there are better and easier options.
+#
+# With the configuration below, Pressing the button will cause the relay to engage for 15 minutes then shut off. 
+# I use this to control an exhaust fan.
+#   While in timer mode, the LED will flash between RED and TEAL (green+blue)
+#   Manual on is only available via HASS, and will cause the LED to be RED while on.
+#   The Blue LED is hard-wired and inverse of the red LED.
+#
+# This configuration works fine as an inexpensive alternative for a timed-run light or appliance switch.
+# It will work with or without a home automation hub (HASS)
+esphome:
+  name: sw_fc
+  platform: ESP8266
+  board: esp01_1m
+
+
+wifi:
+  ssid: !secret wifi1_ssid
+  password: !secret wifi1_passwd
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Sw Fc Fallback Hotspot"
+    password: "ndDKehegHf1O"
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+
+script:
+  - id: flashing_on
+    then:
+      - while:
+          condition:
+            switch.is_on: relay
+          then:
+            - output.turn_on: led_red
+            - output.turn_off: led_status_green
+            - delay: 1s
+            - output.turn_off: led_red
+            - output.turn_on: led_status_green
+            - delay: 1s
+      - output.turn_off: led_status_green
+
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO3 
+      mode: INPUT_PULLUP
+      inverted: True
+    id: button_sw
+    on_release:
+      then:
+        - if:
+            condition:
+              switch.is_on: relay
+            then:
+              - switch.turn_off: run_timed
+            else:
+              - switch.turn_on: run_timed
+
+switch:
+  - platform: gpio
+    name: "Relay"
+    id: relay
+    pin: GPIO4
+    internal: true
+    restore_mode: ALWAYS_OFF
+    icon: "mdi:light-switch"
+
+      
+  - platform: template
+    name: "immediate"
+    id: immediate_sw
+    turn_on_action:
+      - switch.turn_on: relay
+      - lambda: id(immediate_sw).publish_state(1); # do this for the automation console to display the proper state
+      - output.turn_on: led_red
+    turn_off_action:
+      - switch.turn_off: relay
+      - lambda: id(immediate_sw).publish_state(0); # do this for the automation console to display the proper state
+      - output.turn_off: led_red
+      - output.turn_off: led_status_green
+
+  - platform: template
+    name: "run_timed"
+    id: run_timed
+    turn_on_action:
+      - lambda: id(run_timed).publish_state(1); # do this for the automation console to display the proper state
+      - switch.turn_on: relay
+      - script.execute: flashing_on
+      - delay: 10min
+      - switch.turn_off: relay
+      - script.stop: flashing_on
+      - output.turn_off: led_red
+      - output.turn_off: led_status_green
+      - lambda: id(run_timed).publish_state(0); # do this for the automation console to display the proper state
+    turn_off_action:
+      - script.stop: flashing_on
+      - switch.turn_off: relay
+      - lambda: id(run_timed).publish_state(0); # do this for the automation console to display the proper state
+      - output.turn_off: led_red
+      - output.turn_off: led_status_green
+
+
+output:
+  - platform: gpio
+    id: led_red
+    pin: GPIO14
+  - platform: gpio
+    id: led_status_green
+    pin: GPIO0
+    
